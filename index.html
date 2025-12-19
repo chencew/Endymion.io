@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Christmas Magic | Anime Surprise</title>
+    <title>Christmas Magic | Musical Surprise</title>
     
     <!-- 1. 基础库 -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -34,7 +34,7 @@
         .header { text-align: center; padding-top: 6vh; pointer-events: auto; }
         .title {
             font-size: clamp(2.5rem, 6vw, 5rem); margin: 0; font-weight: 300; letter-spacing: 0.1em;
-            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* 弹性过渡 */
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         
         /* 普通模式标题 */
@@ -49,7 +49,7 @@
             background: linear-gradient(180deg, #fff 30%, #FF00FF 100%); 
             -webkit-background-clip: text; color: transparent;
             text-shadow: 0 0 40px rgba(255, 0, 255, 0.6);
-            transform: scale(1.1); /* 稍微放大 */
+            transform: scale(1.1); 
             letter-spacing: 0.2em;
         }
 
@@ -150,6 +150,7 @@
             const containerRef = useRef(null);
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
+            const audioRef = useRef(null); // 音频引用
             
             const gestureRef = useRef('explode');
             const prevGestureRef = useRef('explode');
@@ -159,9 +160,17 @@
             useEffect(() => { 
                 if (prevGestureRef.current === 'tree' && gesture === 'explode') {
                     cycleCountRef.current += 1;
-                    if (cycleCountRef.current >= 7) {
+                    
+                    // 刚好第7次时触发
+                    if (cycleCountRef.current === 7) {
                         specialModeRef.current = true;
                         setIsSpecialMode(true);
+                        
+                        // --- 播放音乐 ---
+                        if (audioRef.current) {
+                            audioRef.current.currentTime = 0;
+                            audioRef.current.play().catch(e => console.log("Audio play error:", e));
+                        }
                     }
                 }
                 prevGestureRef.current = gesture;
@@ -192,7 +201,7 @@
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
                 containerRef.current.appendChild(renderer.domElement);
 
-                // Bloom - Threshold 0.25 (Dark photo won't glow)
+                // Bloom
                 const renderScene = new RenderPass(scene, camera);
                 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
                 bloomPass.strength = 1.3; 
@@ -251,7 +260,6 @@
                 placeholderTex.needsUpdate = true;
                 const imgTexture = texLoader.load('./123.png', undefined, undefined, () => console.log('123.png missing'));
                 
-                // 压暗材质以防过曝 (Color 0x888888)
                 const planeMat = new THREE.MeshBasicMaterial({ 
                     map: imgTexture || placeholderTex, 
                     transparent: true, 
@@ -283,10 +291,8 @@
                         if (!photoMesh.visible) photoMesh.visible = true;
                         photoMesh.lookAt(camera.position); 
                         
-                        // --- 动漫跳跃动画 ---
-                        // Math.abs(sin) 产生类似皮球弹跳的弧线
-                        // 频率 2.0，幅度 0.25 => 轻快的小跳跃
-                        photoMesh.position.y = Math.abs(Math.sin(time * 2.0)) * 0.25 - 0.5; // -0.5 让它稍微往下一点，居中
+                        // 动漫跳跃动画
+                        photoMesh.position.y = Math.abs(Math.sin(time * 2.0)) * 0.25 - 0.5;
 
                         if(starMesh.visible) starMesh.visible = false;
                     } else {
@@ -306,7 +312,6 @@
                         let targetScale = p.scaleBase;
 
                         if (isSpecial) {
-                            // 特殊模式：光环
                             const ringRadius = 9.5 + (i % 5) * 0.8; 
                             const angle = i * 0.02 + time * 0.15; 
                             const tx = Math.cos(angle) * ringRadius;
@@ -314,9 +319,8 @@
                             const ty = (p.treeRatio - 0.5) * 14; 
                             p.targetPos.set(tx, ty, tz);
                             p.lerpSpeed = 0.015; 
-                            targetScale *= 0.3; // 变小变暗
+                            targetScale *= 0.3; 
                         } else if (mode === 'tree') {
-                            // 树
                             const h = 16; 
                             const y = -7 + p.treeRatio * h; 
                             let r = (1 - p.treeRatio) * 7.0; 
@@ -326,7 +330,6 @@
                             p.targetPos.set(tx, y, tz);
                             p.lerpSpeed = 0.03 + Math.random() * 0.02;
                         } else {
-                            // 星云
                             const angle = i * 0.1 + time * 0.05;
                             const r = 2 + (i / PARTICLE_COUNT) * 12;
                             const y = Math.sin(r * 0.5 + time * 0.5) * 1.5 + (Math.random()-0.5)*2;
@@ -417,7 +420,6 @@
                     ) : (
                         <div className="ui-layer">
                             <div className="header">
-                                {/* 这里的 ClassName 逻辑是关键：切换为 Special 样式，而不是隐藏 */}
                                 <h1 className={`title ${isSpecialMode ? 'special' : 'normal'}`}>
                                     {isSpecialMode ? "SURPRISE!" : "MERRY CHRISTMAS"}
                                 </h1>
@@ -445,6 +447,9 @@
                         </div>
                     )}
                     <div ref={containerRef} style={{position:'absolute', top:0, left:0, zIndex:1}}></div>
+                    
+                    {/* 音频标签：不循环，隐藏 */}
+                    <audio ref={audioRef} src="./123.mp3" preload="auto"></audio>
                 </React.Fragment>
             );
         };
