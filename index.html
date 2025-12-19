@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Magical Christmas | Hand Control</title>
+    <title>Christmas Magic 3D</title>
     
-    <!-- 1. 核心工具库 -->
+    <!-- 1. 基础库 -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- 2. MediaPipe 全局脚本 (最稳定的加载方式，修复导出报错问题) -->
+    <!-- 2. MediaPipe 全局脚本 (最稳定的加载方式) -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -18,17 +18,18 @@
         body, html { margin: 0; padding: 0; background-color: #000; overflow: hidden; font-family: 'Helvetica Neue', sans-serif; touch-action: none; }
         #root { width: 100vw; height: 100vh; }
         
-        /* Loading Overlay */
-        #loading-overlay {
+        /* 静态加载层 */
+        #static-loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; z-index: 9999; display: flex; flex-direction: column;
+            background: #000; z-index: 99999; display: flex; flex-direction: column;
             align-items: center; justify-content: center; transition: opacity 0.5s;
         }
-        .loader-text { color: #d4af37; font-size: 1.2rem; margin-top: 20px; letter-spacing: 2px; }
-        
-        /* UI Layer */
+        .loader-content { text-align: center; color: #d4af37; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #333; border-top: 4px solid #d4af37; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* UI */
         .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; flex-direction: column; justify-content: space-between; }
-        
         .header { text-align: center; padding-top: 5vh; pointer-events: auto; }
         .title {
             font-size: clamp(2rem, 5vw, 4rem); margin: 0; font-weight: 300;
@@ -36,50 +37,41 @@
             text-shadow: 0 0 20px rgba(255, 215, 0, 0.4); letter-spacing: 0.1em;
         }
 
-        /* Controls Bottom */
         .controls { padding: 20px; display: flex; flex-direction: row; align-items: flex-end; gap: 20px; pointer-events: auto; }
-        
         .cam-box { 
             width: 120px; height: 90px; background: #111; 
             border: 1px solid #333; position: relative; border-radius: 8px; overflow: hidden; 
-            transform: scaleX(-1); /* Mirror */
+            transform: scaleX(-1); 
         }
         @media (max-width: 600px) {
             .controls { flex-direction: column-reverse; align-items: center; padding-bottom: 40px; }
-            .cam-box { width: 100px; height: 75px; border: 1px solid #FFD700; }
         }
 
-        .cam-video { width: 100%; height: 100%; object-fit: cover; opacity: 0.6; }
-        .cam-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-        
-        /* Status Badges */
         .status-panel { display: flex; flex-direction: column; gap: 8px; padding-bottom: 5px; }
         .status-badge {
-            color: #444; font-size: 0.9rem; font-weight: bold; display: flex; align-items: center; gap: 10px;
-            transition: all 0.3s; padding: 5px 10px; border-radius: 20px; background: rgba(0,0,0,0.5);
+            color: #555; font-size: 0.9rem; font-weight: bold; display: flex; align-items: center; gap: 10px;
+            transition: all 0.3s; padding: 5px 10px; border-radius: 20px; background: rgba(255,255,255,0.05);
         }
-        .status-badge.active { color: #fff; background: rgba(255,255,255,0.1); box-shadow: 0 0 15px rgba(255,255,255,0.1); }
+        .status-badge.active { color: #fff; background: rgba(255,215,0,0.2); box-shadow: 0 0 15px rgba(255,215,0,0.2); }
         .dot { width: 8px; height: 8px; background: currentColor; border-radius: 50%; }
-        .active .dot { box-shadow: 0 0 10px currentColor; }
 
-        /* Start Button */
+        /* Start Screen */
+        .start-screen {
+            position: absolute; width: 100%; height: 100%; z-index: 100;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; background: #000;
+        }
         .btn-start {
-            margin-top: 30px; padding: 15px 40px; font-size: 1.2rem;
-            background: rgba(255, 215, 0, 0.1); color: #FFD700; border: 1px solid #FFD700;
+            margin-top: 30px; padding: 15px 50px; font-size: 1.2rem;
+            background: transparent; color: #FFD700; border: 1px solid #FFD700;
             cursor: pointer; text-transform: uppercase; letter-spacing: 2px;
-            transition: 0.3s; border-radius: 4px;
+            border-radius: 50px; transition: 0.3s;
         }
-        .btn-start:hover { background: #FFD700; color: #000; box-shadow: 0 0 30px rgba(255, 215, 0, 0.6); }
+        .btn-start:hover { background: #FFD700; color: #000; box-shadow: 0 0 40px rgba(255, 215, 0, 0.6); }
 
-        /* Error Log */
-        #debug-log {
-            position: fixed; bottom: 0; left: 0; width: 100%; max-height: 100px; overflow-y: auto;
-            background: rgba(50,0,0,0.8); color: #ffaaaa; font-size: 10px; padding: 5px; 
-            z-index: 10000; display: none;
-        }
+        #debug-log { position: fixed; bottom: 0; left: 0; width: 100%; max-height: 100px; overflow-y: auto; background: rgba(50,0,0,0.8); color: #ffaaaa; font-size: 10px; padding: 5px; z-index: 10000; display: none; }
     </style>
 
-    <!-- 3. Import Map (仅保留 React 和 Three.js) -->
+    <!-- 3. React/Three Import Map -->
     <script type="importmap">
     {
         "imports": {
@@ -92,10 +84,14 @@
     </script>
 </head>
 <body>
-    <div id="loading-overlay">
-        <div class="loader-text">INITIALIZING MAGIC...</div>
-        <div style="color: #666; font-size: 0.8rem; margin-top: 10px;">Loading 3D Engine & AI</div>
+    <!-- 静态加载层：页面刚打开时显示，React 启动后立刻移除 -->
+    <div id="static-loader">
+        <div class="loader-content">
+            <div class="spinner"></div>
+            <div>LOADING SYSTEM...</div>
+        </div>
     </div>
+
     <div id="debug-log"></div>
     <div id="root"></div>
 
@@ -104,10 +100,12 @@
             const el = document.getElementById('debug-log');
             el.style.display = 'block';
             el.innerHTML += `<div>Error: ${msg} (Line ${line})</div>`;
+            // 如果报错了，强制移除加载层以便看错误
+            const loader = document.getElementById('static-loader');
+            if(loader) loader.style.display = 'none';
         };
     </script>
 
-    <!-- 4. 主逻辑 -->
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useRef } from 'react';
         import { createRoot } from 'react-dom/client';
@@ -116,20 +114,13 @@
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-        // 这里的关键修改：不使用 import 导入 MediaPipe，而是直接从 window 对象获取
-        // 因为我们在 <head> 里通过 <script> 标签加载了它们
+        // 绑定全局 MediaPipe
         const MediaPipeHands = window.Hands;
         const MediaPipeCamera = window.Camera;
-        const { drawConnectors, drawLandmarks } = window; // drawing_utils 会挂载到 window
-
-        const hideLoader = () => {
-            const loader = document.getElementById('loading-overlay');
-            if(loader) loader.style.opacity = '0';
-            setTimeout(() => { if(loader) loader.style.display = 'none'; }, 500);
-        };
 
         const App = () => {
             const [hasStarted, setHasStarted] = useState(false);
+            const [isInitializing, setIsInitializing] = useState(false);
             const [gesture, setGesture] = useState('explode'); 
             const [debugText, setDebugText] = useState('');
             
@@ -137,12 +128,22 @@
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             
+            // Refs
             const sceneRef = useRef(null);
             const particlesRef = useRef(null);
             const starRef = useRef(null);
             const gestureRef = useRef('explode');
 
             useEffect(() => { gestureRef.current = gesture; }, [gesture]);
+
+            // --- 关键修复：组件一挂载，立刻移除静态 Loading 层 ---
+            useEffect(() => {
+                const loader = document.getElementById('static-loader');
+                if(loader) {
+                    loader.style.opacity = '0';
+                    setTimeout(() => loader.style.display = 'none', 500);
+                }
+            }, []);
 
             // --- Three.js 初始化 ---
             useEffect(() => {
@@ -154,25 +155,24 @@
                 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
                 camera.position.z = 12;
 
-                const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+                const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
                 containerRef.current.appendChild(renderer.domElement);
 
-                // Bloom Effect
+                // Bloom
                 const renderScene = new RenderPass(scene, camera);
                 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
                 bloomPass.strength = 1.8;
                 bloomPass.radius = 0.5;
                 bloomPass.threshold = 0;
-
                 const composer = new EffectComposer(renderer);
                 composer.addPass(renderScene);
                 composer.addPass(bloomPass);
 
                 // Particles
-                const particleCount = 2000; 
-                const geometry = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+                const particleCount = 1800; 
+                const geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
                 const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
                 const mesh = new THREE.InstancedMesh(geometry, material, particleCount);
                 
@@ -197,7 +197,7 @@
                 particlesRef.current = mesh;
 
                 // Star
-                const starGeo = new THREE.OctahedronGeometry(1.2, 0);
+                const starGeo = new THREE.OctahedronGeometry(1.5, 0);
                 const starMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
                 const star = new THREE.Mesh(starGeo, starMat);
                 star.position.set(0, 6, 0);
@@ -230,17 +230,14 @@
 
                     for(let i=0; i<particleCount; i++){
                         const data = particleData[i];
-                        
                         if (mode === 'tree') {
                             const height = 12;
                             const progress = (i / particleCount); 
                             const targetY = -4 + (progress * height);
                             const coneRadius = (1 - progress) * 5; 
-                            
                             const spiralAngle = i * 0.5 + time * 1.5;
                             const tx = Math.cos(spiralAngle) * coneRadius;
                             const tz = Math.sin(spiralAngle) * coneRadius;
-
                             dummy.position.x += (tx - dummy.position.x) * 0.05;
                             dummy.position.y += (targetY - dummy.position.y) * 0.05;
                             dummy.position.z += (tz - dummy.position.z) * 0.05;
@@ -248,12 +245,10 @@
                             const tx = Math.sin(time * 0.2 + data.angle) * data.radius * 2;
                             const ty = Math.cos(time * 0.3 + data.angle) * data.radius + Math.sin(time)*0.5;
                             const tz = Math.cos(time * 0.1 + i) * data.radius;
-
                             dummy.position.x += (tx - dummy.position.x) * 0.03;
                             dummy.position.y += (ty - dummy.position.y) * 0.03;
                             dummy.position.z += (tz - dummy.position.z) * 0.03;
                         }
-                        
                         dummy.rotation.x = time + i;
                         dummy.rotation.y = time + i;
                         dummy.updateMatrix();
@@ -274,8 +269,14 @@
             // --- MediaPipe 初始化 ---
             useEffect(() => {
                 if(!hasStarted) return;
+                setIsInitializing(true);
 
-                // 使用全局变量 MediaPipeHands
+                if (!MediaPipeHands || !MediaPipeCamera) {
+                    setDebugText("Error: MediaPipe Failed to Load");
+                    setIsInitializing(false);
+                    return;
+                }
+
                 const hands = new MediaPipeHands({locateFile: (file) => {
                     return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
                 }});
@@ -294,32 +295,22 @@
                     
                     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                         const landmarks = results.multiHandLandmarks[0];
-                        
-                        // 绘制手部骨架 (使用全局 window.drawConnectors)
-                        if(window.drawConnectors) {
-                            window.drawConnectors(ctx, landmarks, window.HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
-                        }
-                        if(window.drawLandmarks) {
-                            window.drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 1});
-                        }
+                        if(window.drawConnectors) window.drawConnectors(ctx, landmarks, window.HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+                        if(window.drawLandmarks) window.drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 1});
 
-                        // 手势判断逻辑
+                        // Logic
                         const wrist = landmarks[0];
                         const tips = [8, 12, 16, 20];
                         let extendedCount = 0;
                         tips.forEach(t => {
-                            if (Math.hypot(landmarks[t].x - wrist.x, landmarks[t].y - wrist.y) > 0.25) {
-                                extendedCount++;
-                            }
+                            if (Math.hypot(landmarks[t].x - wrist.x, landmarks[t].y - wrist.y) > 0.25) extendedCount++;
                         });
-
                         if (extendedCount <= 1) setGesture('tree');
                         else if (extendedCount >= 3) setGesture('explode');
                     }
                     ctx.restore();
                 });
 
-                // 初始化摄像头
                 const camera = new MediaPipeCamera(videoRef.current, {
                     onFrame: async () => {
                         await hands.send({image: videoRef.current});
@@ -329,23 +320,23 @@
                 });
                 
                 camera.start()
-                    .then(() => setDebugText(''))
-                    .catch(err => setDebugText('Cam Err: ' + err.message));
-
-                hideLoader();
+                    .then(() => {
+                        setDebugText('');
+                        setIsInitializing(false);
+                    })
+                    .catch(err => {
+                        setDebugText('Cam Error: ' + err.message);
+                        setIsInitializing(false);
+                    });
 
             }, [hasStarted]);
 
             return (
                 <React.Fragment>
                     {!hasStarted ? (
-                        <div id="welcome-screen" style={{position:'absolute', zIndex:100, width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column'}}>
+                        <div className="start-screen">
                             <h1 className="title">MERRY CHRISTMAS</h1>
-                            <button className="btn-start" onClick={() => {
-                                setHasStarted(true);
-                                const loader = document.getElementById('loading-overlay');
-                                if(loader) loader.style.display = 'flex'; 
-                            }}>
+                            <button className="btn-start" onClick={() => setHasStarted(true)}>
                                 Start Experience
                             </button>
                             <p style={{color:'#888', marginTop:'15px', fontSize:'0.8rem'}}>Ensure camera permissions are allowed</p>
@@ -360,12 +351,19 @@
                                 <div className="cam-box">
                                     <video ref={videoRef} className="cam-video" playsInline webkit-playsinline="true" muted></video>
                                     <canvas ref={canvasRef} className="cam-canvas" width="320" height="240"></canvas>
+                                    
+                                    {isInitializing && (
+                                        <div style={{position:'absolute', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', color:'#d4af37', fontSize:'12px', textAlign:'center'}}>
+                                            Starting Camera...
+                                        </div>
+                                    )}
+                                    
                                     {debugText && <div style={{position:'absolute', top:0, color:'red', background:'rgba(0,0,0,0.8)', fontSize:'10px'}}>{debugText}</div>}
                                 </div>
                                 
                                 <div className="status-panel">
                                     <div className={`status-badge ${gesture === 'explode' ? 'active' : ''}`} style={{color: '#87CEEB'}}>
-                                        <div className="dot"></div> OPEN HAND (EXPLODE)
+                                        <div className="dot"></div> OPEN HAND
                                     </div>
                                     <div className={`status-badge ${gesture === 'tree' ? 'active' : ''}`} style={{color: '#FFD700'}}>
                                         <div className="dot"></div> FIST (TREE)
