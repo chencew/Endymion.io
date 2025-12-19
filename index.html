@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Christmas Magic | Final Polish</title>
+    <title>Christmas Magic | Surprise Edition</title>
     
     <!-- 1. 基础编译库 -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -37,12 +37,12 @@
             background: linear-gradient(180deg, #fff 40%, #FFD700 100%); 
             -webkit-background-clip: text; color: transparent;
             text-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+            transition: all 0.5s;
         }
 
         /* Controls */
         .controls { padding: 40px; display: flex; flex-direction: row; align-items: flex-end; gap: 30px; pointer-events: auto; }
         
-        /* 监控框：做得像个高科技取景器 */
         .monitor-box { 
             width: 130px; height: 98px; 
             background: rgba(10, 10, 10, 0.9); 
@@ -50,12 +50,9 @@
             position: relative; overflow: hidden; 
             transform: scaleX(-1);
         }
-        .monitor-corners {
-            position: absolute; width: 100%; height: 100%; pointer-events: none; border: 1px solid transparent;
-        }
-        /* 激活状态 */
         .monitor-box.active { border-color: #FFD700; box-shadow: 0 0 20px rgba(255, 215, 0, 0.1); }
-        
+        .monitor-box.special { border-color: #FF00FF; box-shadow: 0 0 30px #FF00FF; } /* 特殊模式边框 */
+
         .cam-video { position: absolute; width: 100%; height: 100%; object-fit: cover; opacity: 0; z-index: -1; }
         .cam-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; }
         
@@ -105,7 +102,7 @@
 <body>
     <div id="static-loader">
         <div class="spinner"></div>
-        <div class="loader-text">GENERATING PARTICLES</div>
+        <div class="loader-text">GENERATING 5000 PARTICLES...</div>
     </div>
     <div id="debug-log"></div>
     <div id="root"></div>
@@ -130,13 +127,13 @@
         const MediaPipeHands = window.Hands;
         const MediaPipeCamera = window.Camera;
 
-        // --- 核心工具：创建五角星形状 ---
+        // --- 五角星辅助函数 ---
         const createStarShape = (outerRadius, innerRadius) => {
             const shape = new THREE.Shape();
             const points = 5;
             for (let i = 0; i < points * 2; i++) {
                 const r = (i % 2 === 0) ? outerRadius : innerRadius;
-                const a = (i / (points * 2)) * Math.PI * 2 - (Math.PI / 2); // 旋转 -90度 让尖角朝上
+                const a = (i / (points * 2)) * Math.PI * 2 - (Math.PI / 2);
                 const x = Math.cos(a) * r;
                 const y = Math.sin(a) * r;
                 if (i === 0) shape.moveTo(x, y);
@@ -150,15 +147,34 @@
             const [hasStarted, setHasStarted] = useState(false);
             const [gesture, setGesture] = useState('explode'); 
             const [debugText, setDebugText] = useState('');
+            const [isSpecialMode, setIsSpecialMode] = useState(false);
             
             const containerRef = useRef(null);
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
+            
+            // Refs for animation & logic
             const gestureRef = useRef('explode');
+            const prevGestureRef = useRef('explode');
+            const cycleCountRef = useRef(0);
+            const specialModeRef = useRef(false);
 
-            useEffect(() => { gestureRef.current = gesture; }, [gesture]);
+            // Sync state to ref
+            useEffect(() => { 
+                // 检测手势变化：从 TREE 变成 EXPLODE，算作完成一次握手动作
+                if (prevGestureRef.current === 'tree' && gesture === 'explode') {
+                    cycleCountRef.current += 1;
+                    console.log("Cycles:", cycleCountRef.current);
+                    
+                    if (cycleCountRef.current >= 7) {
+                        specialModeRef.current = true;
+                        setIsSpecialMode(true);
+                    }
+                }
+                prevGestureRef.current = gesture;
+                gestureRef.current = gesture; 
+            }, [gesture]);
 
-            // Remove Loader
             useEffect(() => {
                 const loader = document.getElementById('static-loader');
                 if(loader) {
@@ -173,7 +189,7 @@
 
                 const scene = new THREE.Scene();
                 scene.background = new THREE.Color(0x000000);
-                scene.fog = new THREE.FogExp2(0x000000, 0.02); // 增加雾气深度
+                scene.fog = new THREE.FogExp2(0x000000, 0.02);
                 
                 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
                 camera.position.set(0, 0, 16);
@@ -183,36 +199,33 @@
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
                 containerRef.current.appendChild(renderer.domElement);
 
-                // Bloom Effect (发光)
+                // Bloom
                 const renderScene = new RenderPass(scene, camera);
                 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
                 bloomPass.strength = 1.5; 
                 bloomPass.radius = 0.5;
                 bloomPass.threshold = 0.1;
-
                 const composer = new EffectComposer(renderer);
                 composer.addPass(renderScene);
                 composer.addPass(bloomPass);
 
-                // --- 粒子系统 ---
-                const PARTICLE_COUNT = 3200;
-                // 使用很小的四面体，模拟碎钻
-                const geometry = new THREE.TetrahedronGeometry(0.08, 0); 
+                // --- 粒子系统 (增加到 5500) ---
+                const PARTICLE_COUNT = 5500;
+                const geometry = new THREE.TetrahedronGeometry(0.06, 0); 
                 const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
                 const mesh = new THREE.InstancedMesh(geometry, material, PARTICLE_COUNT);
                 
                 const dummy = new THREE.Object3D();
                 const particles = [];
 
-                // 颜色库：更高级的圣诞色（松绿、深红、香槟金）
                 const cGreen = new THREE.Color(0x008000);
-                const cDarkGreen = new THREE.Color(0x006400);
+                const cDarkGreen = new THREE.Color(0x004400);
                 const cGold = new THREE.Color(0xFFD700);
                 const cRed = new THREE.Color(0xDC143C);
                 const cWhite = new THREE.Color(0xFFFFFF);
+                const cSpecial = new THREE.Color(0xFF00FF); // 特殊模式颜色
 
                 for(let i=0; i<PARTICLE_COUNT; i++){
-                    // 70% 绿叶, 30% 装饰物
                     const isLeaf = Math.random() > 0.3;
                     const color = isLeaf 
                         ? (Math.random() > 0.5 ? cGreen : cDarkGreen)
@@ -220,53 +233,54 @@
                     
                     mesh.setColorAt(i, color);
                     
-                    // 随机分布初始位置
                     const r = 10 + Math.random() * 10;
                     const theta = Math.random() * Math.PI * 2;
                     const phi = Math.random() * Math.PI;
                     
                     particles.push({
-                        // 只存储当前位置和目标位置，不再用速度变量
                         currentPos: new THREE.Vector3(r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi)),
                         targetPos: new THREE.Vector3(),
-                        
-                        // 个性化 Lerp 速度 (0.02 - 0.08)，制造层次感
-                        lerpSpeed: 0.02 + Math.random() * 0.06,
-                        
-                        // 闪烁参数
+                        lerpSpeed: 0.02 + Math.random() * 0.05,
                         phase: Math.random() * Math.PI * 2,
-                        scaleBase: isLeaf ? 0.6 : 1.2, // 装饰物更大
-                        
-                        // 树的预计算位置
+                        scaleBase: isLeaf ? 0.6 : 1.2, 
                         treeRatio: i / PARTICLE_COUNT
                     });
                 }
                 scene.add(mesh);
 
-                // --- 真·3D 五角星 (ExtrudeGeometry) ---
-                const starShape = createStarShape(1.2, 0.5); // 外径1.2，内径0.5
-                const starGeo = new THREE.ExtrudeGeometry(starShape, {
-                    depth: 0.4,
-                    bevelEnabled: true,
-                    bevelThickness: 0.1,
-                    bevelSize: 0.1,
-                    bevelSegments: 2
-                });
-                // 让星星中心归位
+                // --- 星星 ---
+                const starShape = createStarShape(1.2, 0.5); 
+                const starGeo = new THREE.ExtrudeGeometry(starShape, { depth: 0.4, bevelEnabled: true, bevelThickness: 0.1, bevelSize: 0.1, bevelSegments: 2 });
                 starGeo.center();
-                
                 const starMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
                 const starMesh = new THREE.Mesh(starGeo, starMat);
-                starMesh.position.set(0, 8, 0); // 树顶
+                starMesh.position.set(0, 8, 0); 
                 starMesh.visible = false;
-                
-                // 给星星加一个内部发光核心
                 const coreGeo = new THREE.IcosahedronGeometry(0.4, 0);
-                const coreMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF }); // 白芯
-                const coreMesh = new THREE.Mesh(coreGeo, coreMat);
-                starMesh.add(coreMesh);
-                
+                const coreMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+                starMesh.add(new THREE.Mesh(coreGeo, coreMat));
                 scene.add(starMesh);
+
+                // --- 终极彩蛋：相框 ---
+                const texLoader = new THREE.TextureLoader();
+                // 尝试加载图片，如果失败也不会报错，只是显示黑块或透明
+                const imgTexture = texLoader.load('./123.png', 
+                    () => console.log("Image Loaded"), 
+                    undefined, 
+                    (err) => console.log("Image missing, please add 123.png")
+                );
+                
+                // 设置相框比例，假设是正方形或者稍微调整
+                const planeGeo = new THREE.PlaneGeometry(6, 6);
+                const planeMat = new THREE.MeshBasicMaterial({ 
+                    map: imgTexture, 
+                    transparent: true, 
+                    side: THREE.DoubleSide,
+                    color: 0xffffff
+                });
+                const photoMesh = new THREE.Mesh(planeGeo, planeMat);
+                photoMesh.visible = false; // 初始隐藏
+                scene.add(photoMesh);
 
                 // Resize
                 const handleResize = () => {
@@ -277,78 +291,92 @@
                 };
                 window.addEventListener('resize', handleResize);
 
-                // --- 动画循环 (The Magic) ---
+                // --- Loop ---
                 const clock = new THREE.Clock();
                 
                 const animate = () => {
                     requestAnimationFrame(animate);
                     const time = clock.getElapsedTime();
                     const mode = gestureRef.current;
+                    const isSpecial = specialModeRef.current;
 
-                    // 1. 星星控制
-                    if (mode === 'tree') {
-                        if(!starMesh.visible) starMesh.visible = true;
-                        // 出现动画：缩放 + 旋转
-                        starMesh.scale.lerp(new THREE.Vector3(1,1,1), 0.05);
-                        starMesh.rotation.y = time * 0.5; // 慢速自转
-                        // 悬浮感
-                        starMesh.position.y = 8 + Math.sin(time * 2) * 0.1;
-                    } else {
-                        starMesh.scale.lerp(new THREE.Vector3(0,0,0), 0.1);
-                        if(starMesh.scale.x < 0.01) starMesh.visible = false;
+                    // 1. 相框控制 (特殊模式)
+                    if (isSpecial) {
+                        if (!photoMesh.visible) photoMesh.visible = true;
+                        photoMesh.lookAt(camera.position); // 始终朝向摄像机
+                        // 微微浮动
+                        photoMesh.position.y = Math.sin(time) * 0.5;
+                        
+                        // 星星消失
+                        starMesh.visible = false;
                     }
 
-                    // 2. 粒子控制
+                    // 2. 星星控制 (普通模式)
+                    else {
+                        if (mode === 'tree') {
+                            if(!starMesh.visible) starMesh.visible = true;
+                            starMesh.scale.lerp(new THREE.Vector3(1,1,1), 0.05);
+                            starMesh.rotation.y = time * 0.5;
+                            starMesh.position.y = 8 + Math.sin(time * 2) * 0.1;
+                        } else {
+                            starMesh.scale.lerp(new THREE.Vector3(0,0,0), 0.1);
+                            if(starMesh.scale.x < 0.01) starMesh.visible = false;
+                        }
+                    }
+
+                    // 3. 粒子控制
                     for(let i=0; i<PARTICLE_COUNT; i++){
                         const p = particles[i];
                         
-                        // --- 计算目标位置 ---
-                        if (mode === 'tree') {
-                            // 圣诞树形态：层层叠叠的松树结构
+                        if (isSpecial) {
+                            // --- 特殊模式：围绕图片旋转 ---
+                            // 环形轨道
+                            const angle = i * 0.05 + time * 0.5; // 快速旋转
+                            const ringRadius = 5 + Math.random() * 4; // 半径在 5-9 之间 (图片宽6)
+                            
+                            const tx = Math.cos(angle) * ringRadius;
+                            const ty = (Math.random() - 0.5) * 6; // 上下随机分布形成光柱
+                            const tz = Math.sin(angle) * ringRadius;
+                            
+                            p.targetPos.set(tx, ty, tz);
+                            p.lerpSpeed = 0.05; // 响应快一点
+
+                        } else if (mode === 'tree') {
+                            // --- 圣诞树 (平滑圆锥版) ---
+                            // 移除了波浪算法，恢复纯净的圆锥
                             const h = 16; 
-                            const y = -7 + p.treeRatio * h; // 高度范围
+                            const y = -7 + p.treeRatio * h; 
                             
-                            // 树半径算法：底部宽，顶部尖，中间加入正弦波模拟“层”
-                            // (1 - ratio) 是圆锥基础
-                            // Math.abs(Math.sin(...)) 是层级起伏
-                            let r = (1 - p.treeRatio) * 6.5; 
-                            r += Math.sin(p.treeRatio * 20) * 0.5; // 增加层级感
+                            // 纯线性半径，底部大顶部小
+                            let r = (1 - p.treeRatio) * 7.0; 
                             
-                            const angle = i * 0.5 + time * 0.1; // 粒子排列角度 + 整体慢速旋转
+                            const angle = i * 0.5 + time * 0.1; 
                             
                             const tx = Math.cos(angle) * r;
                             const tz = Math.sin(angle) * r;
                             
                             p.targetPos.set(tx, y, tz);
+                            p.lerpSpeed = 0.03 + Math.random() * 0.02;
 
                         } else {
-                            // 银河形态：缓慢旋转的盘状星云
-                            // 使用对数螺旋
+                            // --- 星云 ---
                             const angle = i * 0.1 + time * 0.05;
-                            const r = 2 + (i / PARTICLE_COUNT) * 12; // 半径扩散
-                            
-                            // 垂直方向的波浪，模拟星云厚度
+                            const r = 2 + (i / PARTICLE_COUNT) * 12;
                             const y = Math.sin(r * 0.5 + time * 0.5) * 1.5 + (Math.random()-0.5)*2;
-                            
                             const tx = Math.cos(angle) * r;
                             const tz = Math.sin(angle) * r;
-                            
                             p.targetPos.set(tx, y, tz);
+                            p.lerpSpeed = 0.02;
                         }
 
-                        // --- 运动算法 (Lerp - 拒绝弹跳) ---
-                        // 核心：当前位置平滑趋向目标位置
-                        // 不使用 velocity，直接 lerp，这保证了绝对的稳定性
                         p.currentPos.lerp(p.targetPos, p.lerpSpeed);
-
-                        // --- 渲染 ---
                         dummy.position.copy(p.currentPos);
                         
-                        // 闪烁逻辑
-                        const s = p.scaleBase + Math.sin(time * 3 + p.phase) * 0.2;
-                        dummy.scale.setScalar(s * (mode==='tree' ? 1 : 0.6)); // 树形态下粒子大一点
+                        // 闪烁
+                        let s = p.scaleBase + Math.sin(time * 3 + p.phase) * 0.2;
+                        if(isSpecial) s *= 0.8; // 特殊模式下粒子稍微小一点以免遮挡图片
+                        dummy.scale.setScalar(s);
                         
-                        // 粒子自转
                         dummy.rotation.x = time + i;
                         dummy.rotation.z = time + i;
                         
@@ -357,11 +385,6 @@
                     }
                     mesh.instanceMatrix.needsUpdate = true;
                     
-                    // 摄像机微小的漂浮感
-                    camera.position.x += (Math.sin(time*0.2)*0.5 - camera.position.x) * 0.02;
-                    camera.position.y += (Math.cos(time*0.3)*0.5 - camera.position.y) * 0.02;
-                    camera.lookAt(0, 0, 0);
-
                     composer.render();
                 };
                 animate();
@@ -382,30 +405,22 @@
 
                 hands.onResults((results) => {
                     const ctx = canvasRef.current.getContext('2d');
-                    // 清空并画黑底
                     ctx.fillStyle = "#050505";
                     ctx.fillRect(0, 0, 320, 240);
                     
                     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                         const landmarks = results.multiHandLandmarks[0];
                         
-                        // 绘制骨架：青色线条，白色节点
                         if(window.drawConnectors) window.drawConnectors(ctx, landmarks, window.HAND_CONNECTIONS, {color: '#00FFFF', lineWidth: 2});
                         if(window.drawLandmarks) window.drawLandmarks(ctx, landmarks, {color: '#FFFFFF', lineWidth: 0, radius: 2});
 
-                        // 比例法判断手势
                         const wrist = landmarks[0];
                         const tips = [8, 12, 16, 20];
                         const knuckles = [5, 9, 13, 17];
                         let extended = 0;
-                        
                         const dist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
-                        
                         for(let i=0; i<4; i++) {
-                            // 阈值宽松一点，防止抖动
-                            if(dist(landmarks[tips[i]], wrist) > dist(landmarks[knuckles[i]], wrist) * 1.2) {
-                                extended++;
-                            }
+                            if(dist(landmarks[tips[i]], wrist) > dist(landmarks[knuckles[i]], wrist) * 1.2) extended++;
                         }
 
                         if (extended <= 1) setGesture('tree');
@@ -427,28 +442,30 @@
                         <div className="start-screen">
                             <h1 className="title">CHRISTMAS</h1>
                             <button className="btn-start" onClick={() => setHasStarted(true)}>ENTER</button>
-                            <p style={{color:'#444', marginTop:'20px', fontFamily:'monospace', fontSize:'10px'}}>CAMERA ACCESS REQUIRED</p>
                         </div>
                     ) : (
                         <div className="ui-layer">
                             <div className="header">
-                                <h1 className="title">MERRY CHRISTMAS</h1>
+                                <h1 className={`title ${isSpecialMode ? 'special' : ''}`}>
+                                    {isSpecialMode ? "SURPRISE!" : "MERRY CHRISTMAS"}
+                                </h1>
                             </div>
                             
                             <div className="controls">
-                                <div className={`monitor-box ${gesture === 'tree' ? 'active' : ''}`}>
+                                <div className={`monitor-box ${isSpecialMode ? 'special' : (gesture === 'tree' ? 'active' : '')}`}>
                                     <video ref={videoRef} className="cam-video" playsInline webkit-playsinline="true" muted></video>
                                     <canvas ref={canvasRef} className="cam-canvas" width="320" height="240"></canvas>
-                                    <div className="monitor-corners"></div>
-                                    {debugText && <div style={{position:'absolute',bottom:0,color:'red',fontSize:'8px'}}>{debugText}</div>}
+                                    <div style={{position:'absolute', bottom:2, left:5, color: isSpecialMode?'#FF00FF':'#aaa', fontSize:'10px', fontFamily:'monospace'}}>
+                                        {isSpecialMode ? "MODE: SPECIAL" : "MODE: NORMAL"}
+                                    </div>
                                 </div>
                                 
                                 <div className="status-panel">
                                     <div className={`status-badge explode ${gesture === 'explode' ? 'active' : ''}`}>
-                                        OPEN HAND
+                                        OPEN
                                     </div>
                                     <div className={`status-badge tree ${gesture === 'tree' ? 'active' : ''}`}>
-                                        FIST (TREE)
+                                        FIST
                                     </div>
                                 </div>
                             </div>
