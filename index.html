@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Christmas Magic | Musical Surprise</title>
+    <title>Christmas Magic | Final Audio Fix</title>
     
     <!-- 1. 基础库 -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -37,14 +37,12 @@
             transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         
-        /* 普通模式标题 */
         .title.normal {
             background: linear-gradient(180deg, #fff 30%, #FFD700 100%); 
             -webkit-background-clip: text; color: transparent;
             text-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
         }
 
-        /* 彩蛋模式标题 */
         .title.special {
             background: linear-gradient(180deg, #fff 30%, #FF00FF 100%); 
             -webkit-background-clip: text; color: transparent;
@@ -150,26 +148,41 @@
             const containerRef = useRef(null);
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
-            const audioRef = useRef(null); // 音频引用
+            const audioRef = useRef(null); // 音频 Ref
             
             const gestureRef = useRef('explode');
             const prevGestureRef = useRef('explode');
             const cycleCountRef = useRef(0);
             const specialModeRef = useRef(false);
 
+            // --- 核心修复：点击按钮时预加载音频 ---
+            const handleStart = () => {
+                // 解锁浏览器的自动播放策略
+                if (audioRef.current) {
+                    audioRef.current.volume = 1.0;
+                    audioRef.current.play().then(() => {
+                        // 播放成功后立刻暂停并重置，等待彩蛋触发
+                        audioRef.current.pause();
+                        audioRef.current.currentTime = 0;
+                    }).catch(err => {
+                        console.log("Audio Autoplay blocked, trying silent fallback", err);
+                    });
+                }
+                setHasStarted(true);
+            };
+
             useEffect(() => { 
                 if (prevGestureRef.current === 'tree' && gesture === 'explode') {
                     cycleCountRef.current += 1;
-                    
-                    // 刚好第7次时触发
                     if (cycleCountRef.current === 7) {
                         specialModeRef.current = true;
                         setIsSpecialMode(true);
                         
-                        // --- 播放音乐 ---
+                        // 触发彩蛋播放音乐
                         if (audioRef.current) {
                             audioRef.current.currentTime = 0;
-                            audioRef.current.play().catch(e => console.log("Audio play error:", e));
+                            // 这里就不需要 catch 了，因为我们在 handleStart 已经解锁了
+                            audioRef.current.play();
                         }
                     }
                 }
@@ -212,7 +225,7 @@
                 composer.addPass(renderScene);
                 composer.addPass(bloomPass);
 
-                // Particles (5500)
+                // Particles
                 const PARTICLE_COUNT = 5500;
                 const geometry = new THREE.TetrahedronGeometry(0.06, 0); 
                 const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -290,8 +303,6 @@
                     if (isSpecial) {
                         if (!photoMesh.visible) photoMesh.visible = true;
                         photoMesh.lookAt(camera.position); 
-                        
-                        // 动漫跳跃动画
                         photoMesh.position.y = Math.abs(Math.sin(time * 2.0)) * 0.25 - 0.5;
 
                         if(starMesh.visible) starMesh.visible = false;
@@ -414,7 +425,7 @@
                     {!hasStarted ? (
                         <div className="start-screen">
                             <h1 className="title normal">CHRISTMAS</h1>
-                            <button className="btn-start" onClick={() => setHasStarted(true)}>ENTER</button>
+                            <button className="btn-start" onClick={handleStart}>ENTER</button>
                             <p style={{color:'#444', marginTop:'20px', fontFamily:'monospace', fontSize:'10px'}}>CAMERA ACCESS REQUIRED</p>
                         </div>
                     ) : (
