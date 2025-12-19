@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Christmas Magic 3D</title>
     
-    <!-- 1. 基础库 -->
+    <!-- 1. 基础编译库 -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- 2. MediaPipe 全局脚本 (最稳定的加载方式) -->
+    <!-- 2. MediaPipe 核心库 -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -24,9 +24,16 @@
             background: #000; z-index: 99999; display: flex; flex-direction: column;
             align-items: center; justify-content: center; transition: opacity 0.5s;
         }
-        .loader-content { text-align: center; color: #d4af37; }
-        .spinner { width: 40px; height: 40px; border: 4px solid #333; border-top: 4px solid #d4af37; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #333; border-top: 4px solid #d4af37; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* 错误提示弹窗 */
+        .error-modal {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 80%; max-width: 300px; background: rgba(30,30,30,0.95); border: 1px solid #FF4444;
+            padding: 20px; border-radius: 10px; color: #fff; text-align: center; z-index: 200;
+            box-shadow: 0 0 50px rgba(255,0,0,0.2);
+        }
 
         /* UI */
         .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; flex-direction: column; justify-content: space-between; }
@@ -36,7 +43,6 @@
             background: linear-gradient(180deg, #fff, #FFD700); -webkit-background-clip: text; color: transparent;
             text-shadow: 0 0 20px rgba(255, 215, 0, 0.4); letter-spacing: 0.1em;
         }
-
         .controls { padding: 20px; display: flex; flex-direction: row; align-items: flex-end; gap: 20px; pointer-events: auto; }
         .cam-box { 
             width: 120px; height: 90px; background: #111; 
@@ -46,16 +52,7 @@
         @media (max-width: 600px) {
             .controls { flex-direction: column-reverse; align-items: center; padding-bottom: 40px; }
         }
-
-        .status-panel { display: flex; flex-direction: column; gap: 8px; padding-bottom: 5px; }
-        .status-badge {
-            color: #555; font-size: 0.9rem; font-weight: bold; display: flex; align-items: center; gap: 10px;
-            transition: all 0.3s; padding: 5px 10px; border-radius: 20px; background: rgba(255,255,255,0.05);
-        }
-        .status-badge.active { color: #fff; background: rgba(255,215,0,0.2); box-shadow: 0 0 15px rgba(255,215,0,0.2); }
-        .dot { width: 8px; height: 8px; background: currentColor; border-radius: 50%; }
-
-        /* Start Screen */
+        
         .start-screen {
             position: absolute; width: 100%; height: 100%; z-index: 100;
             display: flex; flex-direction: column; align-items: center; justify-content: center; background: #000;
@@ -66,12 +63,17 @@
             cursor: pointer; text-transform: uppercase; letter-spacing: 2px;
             border-radius: 50px; transition: 0.3s;
         }
-        .btn-start:hover { background: #FFD700; color: #000; box-shadow: 0 0 40px rgba(255, 215, 0, 0.6); }
+        .status-badge {
+            color: #555; font-size: 0.9rem; font-weight: bold; display: flex; align-items: center; gap: 10px;
+            transition: all 0.3s; padding: 5px 10px; border-radius: 20px; background: rgba(255,255,255,0.05);
+        }
+        .status-badge.active { color: #fff; background: rgba(255,215,0,0.2); box-shadow: 0 0 15px rgba(255,215,0,0.2); }
+        .dot { width: 8px; height: 8px; background: currentColor; border-radius: 50%; }
 
-        #debug-log { position: fixed; bottom: 0; left: 0; width: 100%; max-height: 100px; overflow-y: auto; background: rgba(50,0,0,0.8); color: #ffaaaa; font-size: 10px; padding: 5px; z-index: 10000; display: none; }
+        /* importmap */
+        
     </style>
-
-    <!-- 3. React/Three Import Map -->
+    
     <script type="importmap">
     {
         "imports": {
@@ -84,27 +86,11 @@
     </script>
 </head>
 <body>
-    <!-- 静态加载层：页面刚打开时显示，React 启动后立刻移除 -->
     <div id="static-loader">
-        <div class="loader-content">
-            <div class="spinner"></div>
-            <div>LOADING SYSTEM...</div>
-        </div>
+        <div class="spinner"></div>
+        <div style="color: #d4af37">INITIALIZING SYSTEM...</div>
     </div>
-
-    <div id="debug-log"></div>
     <div id="root"></div>
-
-    <script>
-        window.onerror = function(msg, url, line) {
-            const el = document.getElementById('debug-log');
-            el.style.display = 'block';
-            el.innerHTML += `<div>Error: ${msg} (Line ${line})</div>`;
-            // 如果报错了，强制移除加载层以便看错误
-            const loader = document.getElementById('static-loader');
-            if(loader) loader.style.display = 'none';
-        };
-    </script>
 
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useRef } from 'react';
@@ -114,21 +100,18 @@
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-        // 绑定全局 MediaPipe
         const MediaPipeHands = window.Hands;
         const MediaPipeCamera = window.Camera;
 
         const App = () => {
             const [hasStarted, setHasStarted] = useState(false);
             const [isInitializing, setIsInitializing] = useState(false);
+            const [errorMsg, setErrorMsg] = useState('');
             const [gesture, setGesture] = useState('explode'); 
-            const [debugText, setDebugText] = useState('');
             
             const containerRef = useRef(null);
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
-            
-            // Refs
             const sceneRef = useRef(null);
             const particlesRef = useRef(null);
             const starRef = useRef(null);
@@ -136,7 +119,7 @@
 
             useEffect(() => { gestureRef.current = gesture; }, [gesture]);
 
-            // --- 关键修复：组件一挂载，立刻移除静态 Loading 层 ---
+            // 移除 Loading
             useEffect(() => {
                 const loader = document.getElementById('static-loader');
                 if(loader) {
@@ -145,17 +128,16 @@
                 }
             }, []);
 
-            // --- Three.js 初始化 ---
+            // Three.js
             useEffect(() => {
                 if (!hasStarted || !containerRef.current) return;
 
                 const scene = new THREE.Scene();
                 scene.fog = new THREE.FogExp2(0x000000, 0.02);
-                
                 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
                 camera.position.z = 12;
 
-                const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+                const renderer = new THREE.WebGLRenderer({ antialias: true });
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
                 containerRef.current.appendChild(renderer.domElement);
@@ -163,7 +145,7 @@
                 // Bloom
                 const renderScene = new RenderPass(scene, camera);
                 const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-                bloomPass.strength = 1.8;
+                bloomPass.strength = 2.0;
                 bloomPass.radius = 0.5;
                 bloomPass.threshold = 0;
                 const composer = new EffectComposer(renderer);
@@ -171,8 +153,8 @@
                 composer.addPass(bloomPass);
 
                 // Particles
-                const particleCount = 1800; 
-                const geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+                const particleCount = 2000; 
+                const geometry = new THREE.BoxGeometry(0.12, 0.12, 0.12);
                 const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
                 const mesh = new THREE.InstancedMesh(geometry, material, particleCount);
                 
@@ -181,11 +163,10 @@
                 const particleData = [];
 
                 for(let i=0; i<particleCount; i++){
-                    dummy.position.random().subScalar(0.5).multiplyScalar(15);
+                    dummy.position.random().subScalar(0.5).multiplyScalar(20);
                     dummy.updateMatrix();
                     mesh.setMatrixAt(i, dummy.matrix);
                     mesh.setColorAt(i, new THREE.Color(colors[Math.floor(Math.random()*colors.length)]));
-                    
                     particleData.push({
                         angle: Math.random() * Math.PI * 2,
                         radius: 3 + Math.random() * 6,
@@ -258,7 +239,6 @@
                     composer.render();
                 };
                 animate();
-
                 return () => {
                     window.removeEventListener('resize', handleResize);
                     containerRef.current.innerHTML = '';
@@ -266,39 +246,29 @@
                 };
             }, [hasStarted]);
 
-            // --- MediaPipe 初始化 ---
+            // MediaPipe & Camera
             useEffect(() => {
                 if(!hasStarted) return;
                 setIsInitializing(true);
 
                 if (!MediaPipeHands || !MediaPipeCamera) {
-                    setDebugText("Error: MediaPipe Failed to Load");
+                    setErrorMsg("AI 引擎加载失败，请刷新重试");
                     setIsInitializing(false);
                     return;
                 }
 
-                const hands = new MediaPipeHands({locateFile: (file) => {
-                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-                }});
-
-                hands.setOptions({
-                    maxNumHands: 1,
-                    modelComplexity: 0, 
-                    minDetectionConfidence: 0.5,
-                    minTrackingConfidence: 0.5
-                });
+                const hands = new MediaPipeHands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+                hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
                 hands.onResults((results) => {
                     const ctx = canvasRef.current.getContext('2d');
                     ctx.save();
                     ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                    
                     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                         const landmarks = results.multiHandLandmarks[0];
                         if(window.drawConnectors) window.drawConnectors(ctx, landmarks, window.HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
                         if(window.drawLandmarks) window.drawLandmarks(ctx, landmarks, {color: '#FF0000', lineWidth: 1});
 
-                        // Logic
                         const wrist = landmarks[0];
                         const tips = [8, 12, 16, 20];
                         let extendedCount = 0;
@@ -312,62 +282,53 @@
                 });
 
                 const camera = new MediaPipeCamera(videoRef.current, {
-                    onFrame: async () => {
-                        await hands.send({image: videoRef.current});
-                    },
-                    width: 320,
-                    height: 240
+                    onFrame: async () => { await hands.send({image: videoRef.current}); },
+                    width: 320, height: 240
                 });
                 
                 camera.start()
-                    .then(() => {
-                        setDebugText('');
-                        setIsInitializing(false);
-                    })
+                    .then(() => { setIsInitializing(false); })
                     .catch(err => {
-                        setDebugText('Cam Error: ' + err.message);
                         setIsInitializing(false);
+                        // 针对性错误提示
+                        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                            setErrorMsg("⚠️ 权限被拒绝\n请在手机设置或浏览器地址栏\n允许访问摄像头");
+                        } else {
+                            setErrorMsg("相机错误: " + err.message);
+                        }
                     });
 
             }, [hasStarted]);
 
             return (
                 <React.Fragment>
+                    {/* 错误提示层 */}
+                    {errorMsg && (
+                        <div className="error-modal">
+                            <div style={{fontSize:'30px', marginBottom:'10px'}}>🚫</div>
+                            <div style={{whiteSpace: 'pre-line', lineHeight: '1.5'}}>{errorMsg}</div>
+                            <button onClick={() => window.location.reload()} style={{marginTop:'15px', padding:'8px 20px', background:'#FF4444', border:'none', color:'white', borderRadius:'5px'}}>刷新重试</button>
+                        </div>
+                    )}
+
                     {!hasStarted ? (
                         <div className="start-screen">
                             <h1 className="title">MERRY CHRISTMAS</h1>
-                            <button className="btn-start" onClick={() => setHasStarted(true)}>
-                                Start Experience
-                            </button>
-                            <p style={{color:'#888', marginTop:'15px', fontSize:'0.8rem'}}>Ensure camera permissions are allowed</p>
+                            <button className="btn-start" onClick={() => setHasStarted(true)}>Start</button>
+                            <p style={{color:'#888', marginTop:'15px', fontSize:'0.8rem'}}>Need Camera Access</p>
                         </div>
                     ) : (
                         <div className="ui-layer">
-                            <div className="header">
-                                <h1 className="title">MERRY CHRISTMAS</h1>
-                            </div>
-                            
+                            <div className="header"><h1 className="title">MERRY CHRISTMAS</h1></div>
                             <div className="controls">
                                 <div className="cam-box">
                                     <video ref={videoRef} className="cam-video" playsInline webkit-playsinline="true" muted></video>
                                     <canvas ref={canvasRef} className="cam-canvas" width="320" height="240"></canvas>
-                                    
-                                    {isInitializing && (
-                                        <div style={{position:'absolute', top:0, left:0, width:'100%', height:'100%', background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', color:'#d4af37', fontSize:'12px', textAlign:'center'}}>
-                                            Starting Camera...
-                                        </div>
-                                    )}
-                                    
-                                    {debugText && <div style={{position:'absolute', top:0, color:'red', background:'rgba(0,0,0,0.8)', fontSize:'10px'}}>{debugText}</div>}
+                                    {isInitializing && <div style={{position:'absolute', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', color:'#d4af37'}}>Connecting...</div>}
                                 </div>
-                                
                                 <div className="status-panel">
-                                    <div className={`status-badge ${gesture === 'explode' ? 'active' : ''}`} style={{color: '#87CEEB'}}>
-                                        <div className="dot"></div> OPEN HAND
-                                    </div>
-                                    <div className={`status-badge ${gesture === 'tree' ? 'active' : ''}`} style={{color: '#FFD700'}}>
-                                        <div className="dot"></div> FIST (TREE)
-                                    </div>
+                                    <div className={`status-badge ${gesture === 'explode' ? 'active' : ''}`} style={{color: '#87CEEB'}}><div className="dot"></div> OPEN HAND</div>
+                                    <div className={`status-badge ${gesture === 'tree' ? 'active' : ''}`} style={{color: '#FFD700'}}><div className="dot"></div> FIST (TREE)</div>
                                 </div>
                             </div>
                         </div>
